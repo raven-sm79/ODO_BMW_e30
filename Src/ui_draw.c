@@ -54,8 +54,8 @@ void draw_digit75(uint16_t x, uint16_t y, uint8_t d, uint16_t color)
 
         for (uint16_t col = 0; col < DIG75_W; col++)
         {
-//            if (line[col >> 3] & (0x80 >> (col & 7)))
-        	  if (line[col >> 3] & (1 << (col & 7)))
+            if (line[col >> 3] & (0x80 >> (col & 7)))
+//        	  if (line[col >> 3] & (1 << (col & 7)))
             {
                 lcd_pixel(x + col, y + row, color);
             }
@@ -73,11 +73,12 @@ void draw_colon75(uint16_t x, uint16_t y, uint16_t color)
 
         for (uint16_t col = 0; col < DIG75_W; col++)
         {
-//            if (line[col >> 3] & (0x80 >> (col & 7)))
-        	if (line[col >> 3] & (1 << (col & 7)))
+            if (line[col >> 3] & (0x80 >> (col & 7)))
+//        	if (line[col >> 3] & (1 << (col & 7)))
             {
                 lcd_pixel(x + col, y + row, color);
             }
         }
     }
 }
+
