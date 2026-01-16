@@ -23,6 +23,7 @@ void lcd_string(uint16_t x, uint16_t y, const uint8_t *s, uint16_t fg, uint16_t 
 void draw_time(uint8_t hh, uint8_t mm);
 void UI_BlinkColon(void);
 void ui_draw_static(void);
+void lcd_draw_mono_1bpp(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint8_t *data, uint16_t bpr, uint16_t fg, uint16_t bg);
 
 
 #endif /* INC_ST7789V_H_ */

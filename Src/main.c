@@ -5,6 +5,9 @@
 #include "fsmc.h"
 #include "ST7789V.h"
 #include "ds3231.h"
+#include "UI.h"
+#include "ui_draw.h"
+
 
 void SystemClock_Config(void);
 
@@ -26,9 +29,10 @@ int main(void) {
 
 	MX_FSMC_Init();
 	st7789_init();
-	lcd_fill_screen(0x0000);
-	ui_draw_time(rtc.hour, rtc.min);
 	ui_draw_static();
+	//ui_draw_time(rtc.hour, rtc.min);
+	ui_draw_time(88, 88);
+
 
 	uint16_t adc_buf[2];
 	HAL_ADC_Start_DMA(&hadc1, (uint32_t*) adc_buf, 2);
@@ -61,7 +65,7 @@ int main(void) {
 		    fsmc_resume();
 
 		    // 5. Обновить UI
-		    ui_draw_time(rtc.hour, rtc.min);
+		    //ui_draw_time(rtc.hour, rtc.min);
 		}
 	}
 }

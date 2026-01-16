@@ -237,8 +237,18 @@ void lcd_string(uint16_t x, uint16_t y, const uint8_t *s,
     }
 }
 
-
-
-
-
-
+void lcd_draw_mono_1bpp(uint16_t x, uint16_t y,
+                        uint16_t w, uint16_t h,
+                        const uint8_t *data, uint16_t bpr,
+                        uint16_t fg, uint16_t bg)
+{
+    for (uint16_t yy = 0; yy < h; yy++) {
+        const uint8_t *row = data + yy * bpr;
+        for (uint16_t xx = 0; xx < w; xx++) {
+            uint8_t b = row[xx >> 3];
+            uint8_t bit = 7 - (xx & 7);   // MSB-first
+            uint16_t col = (b & (1U << bit)) ? fg : bg;
+            lcd_pixel(x + xx, y + yy, col);
+        }
+    }
+}

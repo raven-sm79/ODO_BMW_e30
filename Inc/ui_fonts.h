@@ -3,6 +3,15 @@
 /* ui_fonts.h — ТОЛЬКО алиасы и include */
 
 #include "Fonts/font75_digits.h"
+#include "Fonts/font75_punct.h"
+
+#include "Fonts/font36_digits.h"
+#include "Fonts/font36_punct.h"
+
+#include "Fonts/font27_digits.h"
+#include "Fonts/font27_punct.h"
+
+#include "Fonts/font12_symbols.h"
 
 /* Никаких extern font75_digits здесь больше нет */
 
