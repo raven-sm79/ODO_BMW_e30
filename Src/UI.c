@@ -13,16 +13,16 @@
 
 /* ---------- Макет экрана 240x320 (книжная) ---------- */
 /* Верхняя строка: температура/напряжение */
+#define X_VOLT    20
 #define X_TEMP   170
 #define Y_TOP    10
-#define X_VOLT    80
 
 /* Часы крупные */
 #define X_TIME    10
 #define Y_TIME    83
 
 /* Дата */
-#define X_DATE   120
+#define X_DATE   80
 #define Y_DATE   165
 
 /* Основной пробег (сверху, как ты сказал) */
@@ -223,7 +223,8 @@ void ui_draw_static(void)
 {
 	lcd_fill_screen(BLACK);
 
-    /* Рамка блока счётчиков */
+
+	/* Рамка блока счётчиков */
     /* Если у тебя нет line/rect примитивов — рисуем прямоугольник fill_rect */
     /* Верх/низ */
     lcd_fill_rect(BOX_X, BOX_Y, BOX_W, 1, WHITE);
@@ -237,6 +238,7 @@ void ui_draw_static(void)
     lcd_fill_rect(BOX_X, BOX_HY, BOX_W, 1, WHITE);
 
     /* Можно тут же нарисовать иконки 24x24 позже */
+	ui_draw_rect(5, 5, 230, 310, WHITE);
 }
 
 void ui_draw_all(const ui_data_t *d)
@@ -291,4 +293,48 @@ static void ui_draw_glyph_1bpp(uint16_t x, uint16_t y,
                                uint16_t fg, uint16_t bg)
 {
     lcd_draw_mono_1bpp(x, y, w, h, bmp, bpr, fg, bg);
+}
+
+void ui_draw_static_test(void)
+{
+    /* Очистка экрана */
+    lcd_fill_screen(BLACK);
+
+    /* Рамки счётчиков (если уже есть ui_draw_static — лучше вызвать её) */
+    ui_draw_static();
+
+    /* ===== Верх: напряжение / температура ===== */
+    lcd_fill_rect(0, 40, 240, 30, BLACK);     // чистим строку
+    ui_draw_string12(20,  50, "14.7V", WHITE, BLACK);
+    ui_draw_string12(160, 50, "-12",   WHITE, BLACK);
+    ui_draw_char12  (160 + (FONT12_W + 1) * 3, 45, '\xB0', WHITE, BLACK);
+    ui_draw_char12  (160 + (FONT12_W + 1) * 4, 50, 'C', WHITE, BLACK);
+
+    /* ===== Часы крупные ===== */
+    ui_draw_time(88, 88);
+
+    /* ===== Дата ===== */
+    lcd_fill_rect(0, 160, 240, 25, BLACK);
+    ui_draw_string12(55, 165, "22.03.2026", WHITE, BLACK);
+
+    /* ===== Основной пробег (6 цифр, font36) ===== */
+    lcd_fill_rect(0, 0, 240, 40, BLACK);
+    ui_draw_number6_font36_center(120, 10, 123456);
+
+    /* ===== Счётчики (5 цифр, font27) ===== */
+    /* Лево-верх */
+    lcd_fill_rect(5, 205, 115, 50, BLACK);
+    ui_draw_number5_font27_right(115, 215, 88);
+
+    /* Лево-низ */
+    lcd_fill_rect(5, 262, 115, 50, BLACK);
+    ui_draw_number5_font27_right(115, 272, 88);
+
+    /* Право-верх */
+    lcd_fill_rect(120, 205, 115, 50, BLACK);
+    ui_draw_number5_font27_right(230, 215, 5488);
+
+    /* Право-низ (если хочешь четвертый) */
+    lcd_fill_rect(120, 262, 115, 50, BLACK);
+    ui_draw_number5_font27_right(230, 272, 11118);
 }

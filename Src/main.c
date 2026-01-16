@@ -29,9 +29,11 @@ int main(void) {
 
 	MX_FSMC_Init();
 	st7789_init();
-	ui_draw_static();
+
 	//ui_draw_time(rtc.hour, rtc.min);
-	ui_draw_time(88, 88);
+	//ui_draw_time(88, 88);
+	ui_draw_static_test();
+	ui_draw_static();
 
 
 	uint16_t adc_buf[2];

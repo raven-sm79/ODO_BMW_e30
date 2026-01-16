@@ -17,6 +17,8 @@ typedef struct {
 
 } ui_data_t;
 
+void ui_draw_static_test(void);
+
 /* === Инициализация === */
 void ui_draw_static(void);
 
