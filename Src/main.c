@@ -31,7 +31,6 @@
 #include "gfx.h"
 #include "text.h"
 #include "ui_fonts.h"
-#include "gfx.h"
 #include "ui.h"
 #include "buttons.h"
 #include "nv.h"
@@ -39,7 +38,6 @@
 #include "ntc.h"
 #include "ignition.h"
 #include "speed.h"
-#include "adc.h"
 #include "vbat.h"
 #include "app.h"
 #include "adc_cache.h"
@@ -69,14 +67,6 @@
 /* USER CODE BEGIN PV */
 volatile uint8_t g_ds3231_irq = 0;
 static uint32_t g_last_vbat_ms = 0;
-volatile uint8_t g_ign_off_req = 0;
-
-//static uint8_t is_select_held_at_boot(void)
-//{
-    // ВАЖНО: подставь реальный пин SELECT (PB14 у тебя)
-    // Если кнопка тянет к GND => pressed = RESET
-//    return (HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_14) == GPIO_PIN_RESET);
-//}
 
 /* USER CODE END PV */
 
@@ -158,12 +148,6 @@ int main(void)
   while (1)
   {
 	  	  uint32_t now = HAL_GetTick();
-
-
-
-//	      g_data.temp_c  = NTC_ReadTempC();
-//	      g_data.volt_mv = VBAT_Read_mV();
-//	      UI_DrawTopText(&g_data);
 
 	      /* Кнопки */
 	      btn_event_t ev = BTN_Poll(now);
@@ -343,3 +327,4 @@ void assert_failed(uint8_t *file, uint32_t line)
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
+
