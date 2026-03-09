@@ -32,8 +32,8 @@
  *                      Медиана отлично режет одиночные выбросы.
  */
 #define MAX_TEMP_JUMP    2.5f
-#define FILTER_COEFF     0.95f    // 0.95 = новое значение вносит 5% веса
-#define MEDIAN_SIZE      5         // 3, 5 или 7 – чем больше, тем сильнее сглаживание
+#define FILTER_COEFF     0.7f    // 0.95 = новое значение вносит 5% веса
+#define MEDIAN_SIZE      3         // 3, 5 или 7 – чем больше, тем сильнее сглаживание
 
 /* -----------------------------------------------------------------------------
  * Статические переменные для фильтров
@@ -156,4 +156,5 @@ float NTC_ReadTempC_Blocking(void)
     uint16_t avg_adc = (uint16_t)(sum / NTC_SAMPLES);
     return raw_adc_to_temp_c(avg_adc);
 }
+
 
