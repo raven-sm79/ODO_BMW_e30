@@ -3,6 +3,7 @@
 
 static volatile uint32_t s_pulses = 0;      // остаток импульсов до 1 км (0..SPEED_PPK-1)
 static volatile uint8_t  s_km_flag = 0;
+static volatile uint32_t s_km_pending = 0;  // счётчик, а не флаг
 
 extern TIM_HandleTypeDef htim1;
 
@@ -16,11 +17,24 @@ void SPEED_Init(uint16_t pulse_rem)
 
 void SPEED_OnPulseFilteredISR(void)
 {
+    s_pulses++;
+    if (s_pulses >= SPEED_PPK) {
+        s_pulses -= SPEED_PPK;
+        s_km_pending++;  // атомарно, но можно и так
+    }
+}
+
+uint32_t SPEED_GetKmPending(void) { return s_km_pending; }
+void SPEED_ConsumeKm(uint32_t n) { s_km_pending -= n; }
+
+/*
+void SPEED_OnPulseFilteredISR(void)
+{
     uint32_t p = s_pulses + 1;
     if (p >= SPEED_PPK) { p -= SPEED_PPK; s_km_flag = 1; }
     s_pulses = p;
 }
-
+*/
 uint8_t SPEED_KmTickPending(void) { return s_km_flag; }
 
 void SPEED_ConsumeKmTick(void) { s_km_flag = 0; }
@@ -31,3 +45,4 @@ void SPEED_SetPulseRem(uint16_t rem)
 {
     s_pulses = (rem < SPEED_PPK) ? rem : 0;
 }
+
