@@ -103,9 +103,6 @@ void UI_ResetSelectedCounter(ui_data_t *d);
 /* Обработчик кнопок (внешний вход) */
 void UI_HandleButtonEvent(uint32_t now_ms, btn_id_t id, btn_evt_t evt, ui_data_t *d);
 
-void UI_SetPage(ui_page_t page);                 // вручную (кнопки позже)
-ui_page_t UI_GetPage(void);
-
 void UI_OnUserActivity(uint32_t now_ms);         // дергать при нажатии кнопок
 void UI_Tick(uint32_t now_ms, const ui_data_t *d); // дергать в main while(1)
 
@@ -131,3 +128,4 @@ void UI_DrawAll(const ui_data_t *d);
 void UI_DrawStaticTest(void);
 
 #endif
+
