@@ -159,10 +159,7 @@ int main(void)
     /* Обработка километровых импульсов (с накоплением) */
     uint32_t km = SPEED_GetKmPending();  // сколько километров накопилось
     if (km) {
-        for (uint32_t i = 0; i < km; i++) {
-            APP_OnKmTick(&g_data);       // каждый километр
-        }
-        SPEED_ConsumeKm(km);              // сбрасываем счётчик
+			for (uint32_t i = 0; i < km; i++) APP_OnKmTick(&g_data);
 
 	          UI_DrawOdoMain(&g_data);
 	          UI_DrawCounters(&g_data);
@@ -330,5 +327,6 @@ void assert_failed(uint8_t *file, uint32_t line)
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
+
 
 
