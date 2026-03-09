@@ -1,49 +1,42 @@
 #include "nv.h"
 #include "stm32f3xx_hal.h"
 #include <string.h>
-#include <stddef.h>   /* offsetof */
 
-/* hi2c1 должен быть инициализирован в CubeMX */
 extern I2C_HandleTypeDef hi2c1;
 
-/* 24C32: 4KB, I2C 7-bit addr 0x50 */
+// ===== НАСТРОЙКИ НАДЁЖНОСТИ =====
 #define EEPROM_ADDR_7B   0x50u
 #define EEPROM_ADDR      (EEPROM_ADDR_7B << 1)
-
-/* 24C32 uses 16-bit memory address, page size usually 32 bytes */
 #define EEPROM_PAGE_SZ   32u
-
-/* Два слота. Каждый <= 128..256 байт — с запасом */
-/* 2 слота */
 #define NV_SLOT0_BASE    0x0000
 #define NV_SLOT1_BASE    0x0100
-
-#define NV_MAGIC         0x4F444F33u /* 'ODO3' */
+#define NV_MAGIC         0x4F444F33u
 #define NV_VERSION       02u
+
+#define I2C_TIMEOUT_MS   50          // таймаут одной операции
+#define WRITE_RETRY_MAX  3           // макс. число повторов записи
+#define RECOVERY_DELAY   10          // пауза после сброса I²C
 
 #pragma pack(push, 1)
 typedef struct {
     uint32_t magic;
     uint16_t version;
     uint16_t reserved;
-
     uint32_t seq;
     uint16_t pulse_rem;
-    uint16_t data_len;   /* sizeof(ui_data_t) */
-
+    uint16_t data_len;
     ui_data_t data;
-
-    uint32_t crc32;      /* CRC32 от всего до crc32 (исключая crc32) */
+    uint32_t crc32;
 } nv_blob_t;
 #pragma pack(pop)
 
-/* -------- CRC32 (обычный, полином 0xEDB88320) -------- */
+static uint32_t g_last_seq = 0;
 
+// ===== CRC32 (тот же, что и был) =====
 static uint32_t crc32_calc(const void *data, uint32_t len)
 {
     const uint8_t *p = (const uint8_t*)data;
     uint32_t crc = 0xFFFFFFFFu;
-
     for (uint32_t i = 0; i < len; i++) {
         crc ^= p[i];
         for (int b = 0; b < 8; b++) {
@@ -54,7 +47,23 @@ static uint32_t crc32_calc(const void *data, uint32_t len)
     return ~crc;
 }
 
-/* ---------- EEPROM helpers ---------- */
+// ===== Восстановление I²C после сбоя =====
+static void i2c_recover(void)
+{
+    // Деинициализация
+    HAL_I2C_DeInit(&hi2c1);
+    HAL_Delay(RECOVERY_DELAY);
+
+    // Полная реинициализация через вызов из main (или свою)
+    extern void MX_I2C1_Init(void);  // объявлена в i2c.c
+    MX_I2C1_Init();
+
+    // Проверяем, появилось ли устройство
+    HAL_Delay(RECOVERY_DELAY);
+    HAL_I2C_IsDeviceReady(&hi2c1, EEPROM_ADDR, 3, 100);
+}
+
+// ===== Ожидание готовности EEPROM =====
 static int eep_wait_ready(uint32_t timeout_ms)
 {
     uint32_t t0 = HAL_GetTick();
@@ -66,71 +75,83 @@ static int eep_wait_ready(uint32_t timeout_ms)
     return -1;
 }
 
+// ===== Чтение (без повторов — достаточно надёжно) =====
 static int eep_read(uint16_t mem, uint8_t *buf, uint16_t len)
 {
     if (HAL_I2C_Mem_Read(&hi2c1, EEPROM_ADDR, mem,
-                         I2C_MEMADD_SIZE_16BIT, buf, len, 200) != HAL_OK)
+                         I2C_MEMADD_SIZE_16BIT, buf, len, I2C_TIMEOUT_MS) != HAL_OK)
         return -1;
     return 0;
 }
 
-/* запись с разбиением по страницам */
-static int eep_write(uint16_t mem_addr, const uint8_t *buf, uint16_t len)
+// ===== Запись с повторами и восстановлением =====
+static int eep_write_reliable(uint16_t mem_addr, const uint8_t *buf, uint16_t len)
 {
-    while (len) {
-        uint16_t page_off = (uint16_t)(mem_addr % EEPROM_PAGE_SZ);
-        uint16_t chunk = (uint16_t)(EEPROM_PAGE_SZ - page_off);
-        if (chunk > len) chunk = len;
+    for (int attempt = 0; attempt < WRITE_RETRY_MAX; attempt++) {
+        if (attempt > 0) {
+            HAL_Delay(RECOVERY_DELAY * attempt);  // растущая пауза
+        }
 
-        if (HAL_I2C_Mem_Write(&hi2c1, EEPROM_ADDR, mem_addr,
-                              I2C_MEMADD_SIZE_16BIT, (uint8_t*)buf, chunk, 200) != HAL_OK)
-            return -1;
+        uint16_t remaining = len;
+        uint16_t addr = mem_addr;
+        const uint8_t *ptr = buf;
+        int ok = 1;
 
-        /* ждем окончания внутренней записи */
-        if (eep_wait_ready(20) < 0) return -2;
+        // Разбивка по страницам
+        while (remaining) {
+            uint16_t page_off = addr % EEPROM_PAGE_SZ;
+            uint16_t chunk = EEPROM_PAGE_SZ - page_off;
+            if (chunk > remaining) chunk = remaining;
 
-        mem_addr = (uint16_t)(mem_addr + chunk);
-        buf += chunk;
-        len = (uint16_t)(len - chunk);
+            if (HAL_I2C_Mem_Write(&hi2c1, EEPROM_ADDR, addr,
+                                   I2C_MEMADD_SIZE_16BIT, (uint8_t*)ptr, chunk, I2C_TIMEOUT_MS) != HAL_OK) {
+                ok = 0;
+                break;
+            }
+
+            if (eep_wait_ready(20) < 0) {
+                ok = 0;
+                break;
+            }
+
+            addr += chunk;
+            ptr += chunk;
+            remaining -= chunk;
+        }
+
+        if (ok) return 0;  // успех
+
+        // Неудача — пробуем восстановить шину
+        i2c_recover();
     }
-    return 0;
+    return -1;  // все попытки исчерпаны
 }
 
-
+// ===== Валидация блоба =====
 static uint8_t blob_is_valid(const nv_blob_t *b)
 {
     if (b->magic != NV_MAGIC) return 0;
     if (b->version != NV_VERSION) return 0;
-    if (b->data_len != (uint16_t)sizeof(ui_data_t)) return 0;
+    if (b->data_len != sizeof(ui_data_t)) return 0;
     if (b->pulse_rem >= 4838u) return 0;
 
-    uint32_t need = crc32_calc(b, (uint32_t)(sizeof(nv_blob_t) - sizeof(uint32_t)));
+    uint32_t need = crc32_calc(b, sizeof(nv_blob_t) - 4);
     return (need == b->crc32);
 }
 
+// ===== Чтение слота =====
 static int blob_read(uint16_t base, nv_blob_t *out)
 {
-    return eep_read(base, (uint8_t*)out, (uint16_t)sizeof(nv_blob_t));
+    return eep_read(base, (uint8_t*)out, sizeof(nv_blob_t));
 }
 
-static int blob_write(uint16_t base, const nv_blob_t *in)
-{
-    return eep_write(base, (const uint8_t*)in, (uint16_t)sizeof(nv_blob_t));
-}
-
-static uint32_t g_last_seq = 0;
-
-/* ---------- module state ---------- */
-//static uint8_t  s_have = 0;
-//static uint32_t s_seq  = 0;
-//static uint16_t s_last_base = NV_SLOT0_BASE;
+// ===== Публичные функции =====
 
 void NV_Init(void)
 {
-    /* ничего */
+    // ничего
 }
 
-/* выбираем самый свежий валидный слот */
 int NV_Load(ui_data_t *d, uint16_t *pulse_rem)
 {
     nv_blob_t a, b;
@@ -140,19 +161,12 @@ int NV_Load(ui_data_t *d, uint16_t *pulse_rem)
     uint8_t va = (ra == 0) ? blob_is_valid(&a) : 0;
     uint8_t vb = (rb == 0) ? blob_is_valid(&b) : 0;
 
-    if (!va && !vb) {
-        return -1; /* нет валидных */
-    }
+    if (!va && !vb) return -1;
 
-    const nv_blob_t *best = 0;
-
-    if (va && vb) {
-        best = (a.seq >= b.seq) ? &a : &b;
-    } else if (va) {
-        best = &a;
-    } else {
-        best = &b;
-    }
+    const nv_blob_t *best = NULL;
+    if (va && vb) best = (a.seq >= b.seq) ? &a : &b;
+    else if (va) best = &a;
+    else best = &b;
 
     memcpy(d, &best->data, sizeof(ui_data_t));
     *pulse_rem = best->pulse_rem;
@@ -166,20 +180,15 @@ int NV_Save(const ui_data_t *d, uint16_t pulse_rem)
     nv_blob_t blob;
     memset(&blob, 0, sizeof(blob));
 
-    blob.magic   = NV_MAGIC;
+    blob.magic = NV_MAGIC;
     blob.version = NV_VERSION;
-    blob.seq     = g_last_seq + 1;
+    blob.seq = g_last_seq + 1;
     blob.pulse_rem = (pulse_rem < 4838u) ? pulse_rem : 0;
-    blob.data_len  = (uint16_t)sizeof(ui_data_t);
-    blob.data = *d;
+    blob.data_len = sizeof(ui_data_t);
+    memcpy(&blob.data, d, sizeof(ui_data_t));
+    blob.crc32 = crc32_calc(&blob, sizeof(nv_blob_t) - 4);
 
-    blob.crc32 = crc32_calc(&blob, (uint32_t)(sizeof(nv_blob_t) - sizeof(uint32_t)));
+    uint16_t base = (blob.seq & 1) ? NV_SLOT1_BASE : NV_SLOT0_BASE;
 
-    /* выбираем слот: чередуем по seq (можно и по "хуже/лучше", но так проще) */
-    uint16_t base = (blob.seq & 1u) ? NV_SLOT1_BASE : NV_SLOT0_BASE;
-
-    int r = blob_write(base, &blob);
-    if (r == 0) g_last_seq = blob.seq;
-
-    return r;
+    return eep_write_reliable(base, (const uint8_t*)&blob, sizeof(nv_blob_t));
 }
