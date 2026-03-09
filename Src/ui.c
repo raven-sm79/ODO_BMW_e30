@@ -348,6 +348,22 @@ static void draw_page_main_values(const ui_data_t *d)
     g_cache.trip_ab   = d->trip_ab;
 }
 
+static void draw_trip_values_OnStart(const ui_data_t *d)
+{
+    // Временно — полная отрисовка, без кэша
+    int row_h = BOX_H / 3;
+    int right_x = BOX_X + BOX_W - 8;
+
+    UIF_DrawNumber6_Right27_Trim(right_x, BOX_Y + 0*row_h + 8, d->trip_fuel, UI_YELLOW, UI_BG);
+    UIF_DrawNumber6_Right27_Trim(right_x, BOX_Y + 1*row_h + 8, d->trip_day,  UI_YELLOW, UI_BG);
+    UIF_DrawNumber6_Right27_Trim(right_x, BOX_Y + 2*row_h + 8, d->trip_ab,   UI_YELLOW, UI_BG);
+
+    // И обновляем кэш
+    g_cache.trip_fuel = d->trip_fuel;
+    g_cache.trip_day  = d->trip_day;
+    g_cache.trip_ab   = d->trip_ab;
+}
+
 // значения на сервисной странице (остатки)
 static void draw_page_svc_values_once(const ui_data_t *d)
 {
@@ -428,8 +444,6 @@ void UI_Init(void)
     g_layer = UI_LAYER_FORWARD;
 }
 
-
-
 void UI_DrawStatic(void)
 {
     GFX_FillScreen(UI_BG);
@@ -497,6 +511,18 @@ void UI_DrawAll(const ui_data_t *d)
     UI_DrawCounters(d);
     ui_warn_update(d);
 }
+
+void UI_DrawAll_Start(const ui_data_t *d)
+{
+    UI_DrawTopText(d);
+    UI_DrawTime(d);
+    UI_DrawDate(d);
+    UI_DrawOdoMain(d);
+    draw_trip_values_OnStart(d);
+    ui_warn_update(d);
+}
+
+
 
 void UI_SetPage(ui_page_t page)
 {
