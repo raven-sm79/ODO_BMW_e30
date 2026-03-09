@@ -42,14 +42,14 @@ void ST7789_EndData(void)
 
 void ST7789_WriteDataBytes(const uint8_t *data, uint16_t len)
 {
-    HAL_SPI_Transmit(lcd_spi, (uint8_t*)data, len, HAL_MAX_DELAY);
+    HAL_SPI_Transmit(lcd_spi, (uint8_t*)data, len, 100);
 }
 
 static void lcd_write_cmd(uint8_t c)
 {
     DC_LOW();
     CS_LOW();
-    HAL_SPI_Transmit(lcd_spi, &c, 1, HAL_MAX_DELAY);
+    HAL_SPI_Transmit(lcd_spi, &c, 1, 100);
     CS_HIGH();
 }
 
@@ -57,7 +57,7 @@ static void lcd_write_data(const uint8_t *d, uint16_t len)
 {
     DC_HIGH();
     CS_LOW();
-    HAL_SPI_Transmit(lcd_spi, (uint8_t*)d, len, HAL_MAX_DELAY);
+    HAL_SPI_Transmit(lcd_spi, (uint8_t*)d, len, 100);
     CS_HIGH();
 }
 
@@ -153,7 +153,7 @@ void ST7789_FillColor(uint16_t color)
     DC_HIGH();
     CS_LOW();
     for (uint32_t px = 0; px < (ST7789_WIDTH * ST7789_HEIGHT); px += (sizeof(buf) / 2)) {
-        HAL_SPI_Transmit(lcd_spi, buf, sizeof(buf), HAL_MAX_DELAY);
+        HAL_SPI_Transmit(lcd_spi, buf, sizeof(buf), 100);
     }
     CS_HIGH();
 }
@@ -174,7 +174,7 @@ void ST7789_WriteColorBurst(uint16_t color, uint32_t count)
     while (count) {
         uint32_t px_in_buf = sizeof(buf) / 2;
         uint32_t chunk = (count > px_in_buf) ? px_in_buf : count;
-        HAL_SPI_Transmit(lcd_spi, buf, (uint16_t)(chunk * 2), HAL_MAX_DELAY);
+        HAL_SPI_Transmit(lcd_spi, buf, (uint16_t)(chunk * 2), 100);
         count -= chunk;
     }
     CS_HIGH();
@@ -193,7 +193,7 @@ void ST7789_WritePixels(const uint16_t *pixels, uint32_t count)
             buf[i*2 + 0] = (uint8_t)(pixels[i] >> 8);
             buf[i*2 + 1] = (uint8_t)(pixels[i] & 0xFF);
         }
-        HAL_SPI_Transmit(lcd_spi, buf, chunk * 2, HAL_MAX_DELAY);
+        HAL_SPI_Transmit(lcd_spi, buf, chunk * 2, 100);
         pixels += chunk;
         count -= chunk;
     }
