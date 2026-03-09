@@ -7,7 +7,8 @@ void     SPEED_Init(uint16_t pulse_rem);
 void 	 SPEED_OnPulseFilteredISR(void);
 
 uint32_t SPEED_GetKmPending(void);
-void SPEED_ConsumeKm(uint32_t n);
+//void SPEED_ConsumeKm(uint32_t n);
 
 uint16_t SPEED_GetPulseRem(void);
 void     SPEED_SetPulseRem(uint16_t rem);
+
