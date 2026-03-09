@@ -17,15 +17,24 @@ void SPEED_Init(uint16_t pulse_rem)
 
 void SPEED_OnPulseFilteredISR(void)
 {
-    s_pulses++;
-    if (s_pulses >= SPEED_PPK) {
-        s_pulses -= SPEED_PPK;
-        s_km_pending++;  // атомарно, но можно и так
+    uint32_t p = s_pulses + 1;
+    if (p >= SPEED_PPK) {
+        p -= SPEED_PPK;
+        s_km_pending++;  // атомарно для 32-bit на Cortex-M
     }
+    s_pulses = p;
+}
+uint32_t SPEED_GetKmPending(void)
+{
+    uint32_t pending;
+    __disable_irq();
+    pending = s_km_pending;
+    s_km_pending = 0;
+    __enable_irq();
+    return pending;
 }
 
-uint32_t SPEED_GetKmPending(void) { return s_km_pending; }
-void SPEED_ConsumeKm(uint32_t n) { s_km_pending -= n; }
+//void SPEED_ConsumeKm(uint32_t n) { s_km_pending -= n; }
 
 /*
 void SPEED_OnPulseFilteredISR(void)
@@ -45,4 +54,5 @@ void SPEED_SetPulseRem(uint16_t rem)
 {
     s_pulses = (rem < SPEED_PPK) ? rem : 0;
 }
+
 
