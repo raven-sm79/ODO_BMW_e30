@@ -123,9 +123,12 @@ void UI_DrawCounters(const ui_data_t *d);
 
 /* Полная перерисовка динамики (статик отдельно) */
 void UI_DrawAll(const ui_data_t *d);
+/* Полная отрисовка динамики (статик отдельно) */
+void UI_DrawAll_Start(const ui_data_t *d);
 
 /* Тест */
 void UI_DrawStaticTest(void);
 
 #endif
+
 
