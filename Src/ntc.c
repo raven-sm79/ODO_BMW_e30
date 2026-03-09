@@ -121,7 +121,8 @@ int16_t NTC_ReadTempC(void)
     if (first_sample) {
         filtered = median_temp;
         first_sample = 0;
-        return (int16_t)(filtered + 0.5f);
+        return (int16_t)(roundf(filtered));
+        //return (int16_t)(filtered + 0.5f);
     }
 
     // 5. Ограничиваем скорость изменения (отбрасывание резких выбросов)
@@ -155,3 +156,4 @@ float NTC_ReadTempC_Blocking(void)
     uint16_t avg_adc = (uint16_t)(sum / NTC_SAMPLES);
     return raw_adc_to_temp_c(avg_adc);
 }
+
