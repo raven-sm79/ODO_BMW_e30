@@ -4,6 +4,18 @@
 #include <stdint.h>
 #include "buttons.h"
 
+// ------------------------------------------
+// цвета
+// ------------------------------------------
+#define UI_FG          	0xFFFF  // белый
+#define UI_BG          	0x0000  // черный
+#define UI_CLOCK_COLOR  0xFFFF  // приглушённый голубой
+#define UI_YELLOW      	0xFFE0  // бледно-желтый 0xFFE0 - оригинал
+#define UI_BLUE		   	0x001F  // синий
+#define UI_ICON_COLOR  	0xFFE0  // бледно-желтый , оригинел - 0x7BEF серый
+#define UI_WARN_RED    	0xF800  // красный для варнингов
+
+
 typedef struct {
     uint16_t volt_mv;   // если у тебя mV, сделай uint16_t/uint32_t как удобно
     int16_t  temp_c;
@@ -88,6 +100,9 @@ uint8_t UI_IsDirty(void);
 void    UI_ClearDirty(void);
 void UI_SetDirty(void);
 
+//индикатор ошибки
+void UI_DrawErrorIndicator(uint8_t show);
+
 /* В UI должны быть функции для стрелки и смены страницы */
 void UI_SetPage(ui_page_t page);
 ui_page_t UI_GetPage(void);
@@ -130,5 +145,3 @@ void UI_DrawAll_Start(const ui_data_t *d);
 void UI_DrawStaticTest(void);
 
 #endif
-
-

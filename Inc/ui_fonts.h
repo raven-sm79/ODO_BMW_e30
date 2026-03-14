@@ -28,6 +28,8 @@ void UIF_DrawNumber6_Right27_Trim(int right_x, int y, uint32_t val, uint16_t fg,
 void UIF_UpdateNumber6_Right27(int right_x, int y, uint32_t old_val, uint32_t new_val, uint16_t fg, uint16_t bg);
 void UIF_DrawUInt_Right27(int right_x, int y, uint32_t val, uint16_t fg, uint16_t bg);
 void UIF_DrawNumber6_Right27_Fixed(int right_x, int y, uint32_t val, uint16_t fg, uint16_t bg);
+void UIF_DrawNumber6_Colored(int right_x, int y, uint32_t val);
+void UIF_UpdateNumber6_Colored(int right_x, int y, uint32_t old_val, uint32_t new_val);
 
 /* Одометр: ровно 6 цифр (с ведущими нулями), по центру */
 void UIF_DrawNumber6_Center36_Fixed(int center_x, int y,
