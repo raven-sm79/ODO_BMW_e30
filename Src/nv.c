@@ -4,7 +4,7 @@
 
 extern I2C_HandleTypeDef hi2c1;
 
-// ===== НАСТРОЙКИ НАДЁЖНОСТИ =====
+// ===== НАСТРОЙКИ =====
 #define EEPROM_ADDR_7B   0x50u
 #define EEPROM_ADDR      (EEPROM_ADDR_7B << 1)
 #define EEPROM_PAGE_SZ   32u
@@ -13,9 +13,19 @@ extern I2C_HandleTypeDef hi2c1;
 #define NV_MAGIC         0x4F444F33u
 #define NV_VERSION       02u
 
-#define I2C_TIMEOUT_MS   50          // таймаут одной операции
-#define WRITE_RETRY_MAX  3           // макс. число повторов записи
-#define RECOVERY_DELAY   10          // пауза после сброса I²C
+#define I2C_TIMEOUT_MS   50
+#define WRITE_RETRY_MAX  3
+#define RECOVERY_DELAY   10
+
+// ===== ВНУТРЕННЯЯ FLASH =====
+// Адрес в конце Flash (последняя страница, 2 КБ)
+#define FLASH_BACKUP_ADDR  0x0801F800  // для STM32F303 с 64 КБ Flash
+// Проверь в даташите точный адрес последней страницы!
+
+#define FLASH_MAGIC        0xE30B
+
+// Глобальная переменная для флагов ошибок
+volatile uint8_t g_system_error = 0;
 
 #pragma pack(push, 1)
 typedef struct {
@@ -31,8 +41,9 @@ typedef struct {
 #pragma pack(pop)
 
 static uint32_t g_last_seq = 0;
+static uint8_t flash_initialized = 0;
 
-// ===== CRC32 (тот же, что и был) =====
+// ===== CRC32 =====
 static uint32_t crc32_calc(const void *data, uint32_t len)
 {
     const uint8_t *p = (const uint8_t*)data;
@@ -47,23 +58,17 @@ static uint32_t crc32_calc(const void *data, uint32_t len)
     return ~crc;
 }
 
-// ===== Восстановление I²C после сбоя =====
+// ===== I²C функции (как были) =====
 static void i2c_recover(void)
 {
-    // Деинициализация
     HAL_I2C_DeInit(&hi2c1);
     HAL_Delay(RECOVERY_DELAY);
-
-    // Полная реинициализация через вызов из main (или свою)
-    extern void MX_I2C1_Init(void);  // объявлена в i2c.c
+    extern void MX_I2C1_Init(void);
     MX_I2C1_Init();
-
-    // Проверяем, появилось ли устройство
     HAL_Delay(RECOVERY_DELAY);
     HAL_I2C_IsDeviceReady(&hi2c1, EEPROM_ADDR, 3, 100);
 }
 
-// ===== Ожидание готовности EEPROM =====
 static int eep_wait_ready(uint32_t timeout_ms)
 {
     uint32_t t0 = HAL_GetTick();
@@ -75,7 +80,6 @@ static int eep_wait_ready(uint32_t timeout_ms)
     return -1;
 }
 
-// ===== Чтение (без повторов — достаточно надёжно) =====
 static int eep_read(uint16_t mem, uint8_t *buf, uint16_t len)
 {
     if (HAL_I2C_Mem_Read(&hi2c1, EEPROM_ADDR, mem,
@@ -84,12 +88,11 @@ static int eep_read(uint16_t mem, uint8_t *buf, uint16_t len)
     return 0;
 }
 
-// ===== Запись с повторами и восстановлением =====
 static int eep_write_reliable(uint16_t mem_addr, const uint8_t *buf, uint16_t len)
 {
     for (int attempt = 0; attempt < WRITE_RETRY_MAX; attempt++) {
         if (attempt > 0) {
-            HAL_Delay(RECOVERY_DELAY * attempt);  // растущая пауза
+            HAL_Delay(RECOVERY_DELAY * attempt);
         }
 
         uint16_t remaining = len;
@@ -97,7 +100,6 @@ static int eep_write_reliable(uint16_t mem_addr, const uint8_t *buf, uint16_t le
         const uint8_t *ptr = buf;
         int ok = 1;
 
-        // Разбивка по страницам
         while (remaining) {
             uint16_t page_off = addr % EEPROM_PAGE_SZ;
             uint16_t chunk = EEPROM_PAGE_SZ - page_off;
@@ -119,15 +121,13 @@ static int eep_write_reliable(uint16_t mem_addr, const uint8_t *buf, uint16_t le
             remaining -= chunk;
         }
 
-        if (ok) return 0;  // успех
+        if (ok) return 0;
 
-        // Неудача — пробуем восстановить шину
         i2c_recover();
     }
-    return -1;  // все попытки исчерпаны
+    return -1;
 }
 
-// ===== Валидация блоба =====
 static uint8_t blob_is_valid(const nv_blob_t *b)
 {
     if (b->magic != NV_MAGIC) return 0;
@@ -139,29 +139,122 @@ static uint8_t blob_is_valid(const nv_blob_t *b)
     return (need == b->crc32);
 }
 
-// ===== Чтение слота =====
-static int blob_read(uint16_t base, nv_blob_t *out)
+// ===== РАБОТА С FLASH =====
+
+static void flash_unlock(void)
 {
-    return eep_read(base, (uint8_t*)out, sizeof(nv_blob_t));
+    HAL_FLASH_Unlock();
 }
 
-// ===== Публичные функции =====
-
-void NV_Init(void)
+static void flash_lock(void)
 {
-    // ничего
+    HAL_FLASH_Lock();
 }
+
+static int flash_erase_page(void)
+{
+    FLASH_EraseInitTypeDef erase = {
+        .TypeErase = FLASH_TYPEERASE_PAGES,
+        .PageAddress = FLASH_BACKUP_ADDR,
+        .NbPages = 1
+    };
+    uint32_t page_error = 0;
+
+    if (HAL_FLASHEx_Erase(&erase, &page_error) != HAL_OK) {
+        return -1;
+    }
+    return 0;
+}
+
+void NV_BackupToFlash(const ui_data_t *d, uint16_t pulse_rem)
+{
+    nv_blob_t blob;
+    memset(&blob, 0, sizeof(blob));
+
+    blob.magic = NV_MAGIC;
+    blob.version = NV_VERSION;
+    blob.seq = g_last_seq + 1;  // не очень актуально для flash, но пусть
+    blob.pulse_rem = (pulse_rem < 4838u) ? pulse_rem : 0;
+    blob.data_len = sizeof(ui_data_t);
+    memcpy(&blob.data, d, sizeof(ui_data_t));
+    blob.crc32 = crc32_calc(&blob, sizeof(nv_blob_t) - 4);
+
+    flash_unlock();
+
+    // Стираем страницу (только если нужно)
+    if (!flash_initialized) {
+        if (flash_erase_page() != 0) {
+            flash_lock();
+            g_system_error |= ERR_FLASH;
+            return;
+        }
+        flash_initialized = 1;
+    }
+
+    // Записываем по 64 бита (для ускорения)
+    uint64_t *src = (uint64_t*)&blob;
+    uint32_t words = sizeof(nv_blob_t) / 8;
+
+    for (uint32_t i = 0; i < words; i++) {
+        if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD,
+                               FLASH_BACKUP_ADDR + i*8, src[i]) != HAL_OK) {
+            flash_lock();
+            g_system_error |= ERR_FLASH;
+            return;
+        }
+    }
+
+    flash_lock();
+    g_system_error &= ~ERR_FLASH;
+}
+
+int NV_RestoreFromFlash(ui_data_t *d, uint16_t *pulse_rem)
+{
+    nv_blob_t *blob = (nv_blob_t*)FLASH_BACKUP_ADDR;
+
+    // Проверяем валидность
+    if (blob->magic != NV_MAGIC) return -1;
+    if (blob->version != NV_VERSION) return -1;
+    if (blob->data_len != sizeof(ui_data_t)) return -1;
+    if (blob->pulse_rem >= 4838u) return -1;
+
+    uint32_t need = crc32_calc(blob, sizeof(nv_blob_t) - 4);
+    if (need != blob->crc32) return -1;
+
+    memcpy(d, &blob->data, sizeof(ui_data_t));
+    *pulse_rem = blob->pulse_rem;
+    g_last_seq = blob->seq;
+
+    return 0;
+}
+
+void NV_ClearFlashBackup(void)
+{
+    flash_unlock();
+    flash_erase_page();
+    flash_lock();
+    flash_initialized = 0;
+}
+
+// ===== ЗАГРУЗКА =====
 
 int NV_Load(ui_data_t *d, uint16_t *pulse_rem)
 {
     nv_blob_t a, b;
-    int ra = blob_read(NV_SLOT0_BASE, &a);
-    int rb = blob_read(NV_SLOT1_BASE, &b);
+    int ra = eep_read(NV_SLOT0_BASE, (uint8_t*)&a, sizeof(nv_blob_t));
+    int rb = eep_read(NV_SLOT1_BASE, (uint8_t*)&b, sizeof(nv_blob_t));
 
     uint8_t va = (ra == 0) ? blob_is_valid(&a) : 0;
     uint8_t vb = (rb == 0) ? blob_is_valid(&b) : 0;
 
-    if (!va && !vb) return -1;
+    if (!va && !vb) {
+        // Внешняя память не работает - пробуем Flash
+        g_system_error |= ERR_EEPROM;
+        if (NV_RestoreFromFlash(d, pulse_rem) == 0) {
+            return 0;  // загрузились из Flash
+        }
+        return -1;  // всё плохо
+    }
 
     const nv_blob_t *best = NULL;
     if (va && vb) best = (a.seq >= b.seq) ? &a : &b;
@@ -172,8 +265,11 @@ int NV_Load(ui_data_t *d, uint16_t *pulse_rem)
     *pulse_rem = best->pulse_rem;
     g_last_seq = best->seq;
 
+    g_system_error &= ~ERR_EEPROM;
     return 0;
 }
+
+// ===== СОХРАНЕНИЕ =====
 
 int NV_Save(const ui_data_t *d, uint16_t pulse_rem)
 {
@@ -190,5 +286,23 @@ int NV_Save(const ui_data_t *d, uint16_t pulse_rem)
 
     uint16_t base = (blob.seq & 1) ? NV_SLOT1_BASE : NV_SLOT0_BASE;
 
-    return eep_write_reliable(base, (const uint8_t*)&blob, sizeof(nv_blob_t));
+    int result = eep_write_reliable(base, (const uint8_t*)&blob, sizeof(nv_blob_t));
+
+    if (result != 0) {
+        // Ошибка записи - сохраняем во Flash
+        NV_BackupToFlash(d, pulse_rem);
+        g_system_error |= ERR_EEPROM;
+    } else {
+        // Успешно - очищаем флаг
+        g_system_error &= ~ERR_EEPROM;
+        g_last_seq = blob.seq;
+        // Flash не чистим - оставляем как резерв
+    }
+
+    return result;
+}
+
+void NV_Init(void)
+{
+    // Ничего не делаем при инициализации
 }

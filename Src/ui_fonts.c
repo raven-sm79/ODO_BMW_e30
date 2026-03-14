@@ -1,5 +1,6 @@
 #include "ui_fonts.h"
 #include "gfx_mono.h"
+#include "ui.h"
 
 /* Подключаем твои данные шрифтов */
 #include "Fonts/font12_symbols.h"
@@ -181,6 +182,84 @@ static void draw_digit_or_space27(int x, int y, char ch, uint16_t fg, uint16_t b
         return;
     }
     UIF_DrawDigit27(x, y, (uint8_t)(ch - '0'), fg, bg);
+}
+
+static void num6_to_str_leading_zeros(uint32_t val, char out[6], uint16_t *colors)
+{
+    if (val > 999999) val %= 1000000;
+
+    // Распаковываем цифры справа налево
+    uint8_t digits[6];
+    for (int i = 5; i >= 0; i--) {
+        digits[i] = val % 10;
+        val /= 10;
+    }
+
+    // Ищем первую ненулевую цифру
+    uint8_t first_nonzero = 0;
+    while (first_nonzero < 6 && digits[first_nonzero] == 0) {
+        first_nonzero++;
+    }
+
+    // Если все цифры нули (val = 0), то first_nonzero = 6
+    // В этом случае последняя цифра должна быть жёлтой
+
+    for (int i = 0; i < 6; i++) {
+        out[i] = '0' + digits[i];
+
+        if (i < first_nonzero) {
+            // Ведущие нули (до первой значащей цифры) - синие
+            colors[i] = UI_BLUE;
+        } else {
+            // Значащие цифры и последний разряд (даже если ноль) - жёлтые
+            colors[i] = UI_YELLOW;
+        }
+    }
+
+    // Особый случай: если число равно 0, делаем последнюю цифру жёлтой
+    if (first_nonzero == 6) {
+        colors[5] = UI_YELLOW;  // последний разряд жёлтый
+    }
+}
+
+void UIF_DrawNumber6_Colored(int right_x, int y, uint32_t val)
+{
+    char s[6];
+    uint16_t colors[6];
+    num6_to_str_leading_zeros(val, s, colors);
+
+    int dx = UIF_Adv27();
+    int total_w = 6 * dx - 1;
+    int x0 = right_x - total_w;
+
+    for (int i = 0; i < 6; i++) {
+        uint8_t digit = s[i] - '0';
+        UIF_DrawDigit27(x0 + i*dx, y, digit, colors[i], UI_BG);
+    }
+}
+
+void UIF_UpdateNumber6_Colored(int right_x, int y,
+                               uint32_t old_val, uint32_t new_val)
+{
+    char o[6], n[6];
+    uint16_t o_col[6], n_col[6];
+
+    num6_to_str_leading_zeros(old_val, o, o_col);
+    num6_to_str_leading_zeros(new_val, n, n_col);
+
+    int dx = UIF_Adv27();
+    int total_w = 6 * dx - 1;
+    int x0 = right_x - total_w;
+
+    for (int i = 0; i < 6; i++) {
+        if (o[i] == n[i] && o_col[i] == n_col[i]) continue;
+
+        // Стираем старую цифру
+        UIF_DrawDigit27(x0 + i*dx, y, o[i] - '0', UI_BG, UI_BG);
+
+        // Рисуем новую с правильным цветом
+        UIF_DrawDigit27(x0 + i*dx, y, n[i] - '0', n_col[i], UI_BG);
+    }
 }
 
 void UIF_DrawNumber5_Right27_Trim(int right_x, int y, uint32_t val, uint16_t fg, uint16_t bg)

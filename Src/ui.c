@@ -14,16 +14,6 @@
 #include "speed.h"
 #include "logo.h"
 
-// ------------------------------------------
-// цвета
-// ------------------------------------------
-#define UI_FG          0xFFFF  // белый
-#define UI_BG          0x0000  // черный
-#define UI_CLOCK_COLOR  0xFFFF  // приглушённый голубой
-#define UI_YELLOW      0xFFE0  // бледно-желтый 0xFFE0 - оригинал
-#define UI_ICON_COLOR  0xFFE0  // бледно-желтый , оригинел - 0x7BEF серый
-#define UI_WARN_RED    0xF800  // красный для варнингов
-
 #define SVC_LIMIT_KM   100u    // меньше 100 км - красным
 
 // ------------------------------------------
@@ -54,6 +44,17 @@
 #define BOX_W    230
 #define BOX_H    125
 
+// правый край цифр в нижнем блоке
+#define RIGHT_X     (BOX_X + BOX_W - 8)
+
+// высота одной строки в нижнем блоке
+#define ROW_H       (BOX_H / 3)
+
+// Y-координаты трёх строк
+#define ROW_Y0      (BOX_Y + 0*ROW_H + 8)
+#define ROW_Y1      (BOX_Y + 1*ROW_H + 8)
+#define ROW_Y2      (BOX_Y + 2*ROW_H + 8)
+
 // иконка варнинга
 #define WARN_X     10
 #define WARN_Y     10
@@ -62,6 +63,11 @@
 #define ARROW_W     6
 #define ARROW_H    18
 #define ARROW_X     (BOX_X + 55)
+
+// индикация ошибки EEPROM
+#define ERROR_INDICATOR_X  210
+#define ERROR_INDICATOR_Y  15
+#define ERROR_INDICATOR_SIZE 10
 
 // таймаут возврата с сервисной страницы
 #define UI_SVC_TIMEOUT_MS  10000u
@@ -188,7 +194,7 @@ static void redraw_digit75(int x, int y, uint8_t old_d, uint8_t new_d)
 static void redraw_uint27_right6(int right_x, int y, uint32_t oldv, uint32_t newv)
 {
     if (oldv == newv) return;
-    UIF_UpdateNumber6_Right27(right_x, y, oldv, newv, UI_YELLOW, UI_BG);
+    UIF_UpdateNumber6_Colored(RIGHT_X, y, oldv, newv);
 }
 
 // ------------------------------------------
@@ -334,6 +340,34 @@ static void draw_page_svc_static_icons(void)
 }
 
 // значения на главной странице (трипы)
+
+static void draw_page_main_values(const ui_data_t *d)
+{
+    // Если кэш невалиден - полная отрисовка
+    if (!g_cache.valid) {
+
+    	UIF_DrawNumber6_Colored(RIGHT_X, ROW_Y0, d->trip_fuel);
+    	UIF_DrawNumber6_Colored(RIGHT_X, ROW_Y1, d->trip_day);
+    	UIF_DrawNumber6_Colored(RIGHT_X, ROW_Y2, d->trip_ab);
+
+        g_cache.trip_fuel = d->trip_fuel;
+        g_cache.trip_day  = d->trip_day;
+        g_cache.trip_ab   = d->trip_ab;
+        return;
+    }
+
+    // Инкрементальное обновление
+
+    redraw_uint27_right6(RIGHT_X, ROW_Y0, g_cache.trip_fuel, d->trip_fuel);
+    redraw_uint27_right6(RIGHT_X, ROW_Y1, g_cache.trip_day,  d->trip_day);
+    redraw_uint27_right6(RIGHT_X, ROW_Y2, g_cache.trip_ab,   d->trip_ab);
+
+    g_cache.trip_fuel = d->trip_fuel;
+    g_cache.trip_day  = d->trip_day;
+    g_cache.trip_ab   = d->trip_ab;
+}
+
+/*
 static void draw_page_main_values(const ui_data_t *d)
 {
     int row_h = BOX_H / 3;
@@ -347,16 +381,14 @@ static void draw_page_main_values(const ui_data_t *d)
     g_cache.trip_day  = d->trip_day;
     g_cache.trip_ab   = d->trip_ab;
 }
+*/
 
 static void draw_trip_values_OnStart(const ui_data_t *d)
 {
     // Временно — полная отрисовка, без кэша
-    int row_h = BOX_H / 3;
-    int right_x = BOX_X + BOX_W - 8;
-
-    UIF_DrawNumber6_Right27_Trim(right_x, BOX_Y + 0*row_h + 8, d->trip_fuel, UI_YELLOW, UI_BG);
-    UIF_DrawNumber6_Right27_Trim(right_x, BOX_Y + 1*row_h + 8, d->trip_day,  UI_YELLOW, UI_BG);
-    UIF_DrawNumber6_Right27_Trim(right_x, BOX_Y + 2*row_h + 8, d->trip_ab,   UI_YELLOW, UI_BG);
+	UIF_DrawNumber6_Right27_Trim(RIGHT_X, ROW_Y0, d->trip_fuel, UI_YELLOW, UI_BG);
+	UIF_DrawNumber6_Right27_Trim(RIGHT_X, ROW_Y1, d->trip_day,  UI_YELLOW, UI_BG);
+	UIF_DrawNumber6_Right27_Trim(RIGHT_X, ROW_Y2, d->trip_ab,   UI_YELLOW, UI_BG);
 
     // И обновляем кэш
     g_cache.trip_fuel = d->trip_fuel;
@@ -367,22 +399,22 @@ static void draw_trip_values_OnStart(const ui_data_t *d)
 // значения на сервисной странице (остатки)
 static void draw_page_svc_values_once(const ui_data_t *d)
 {
-    int row_h = BOX_H / 3;
-    int right_x = BOX_X + BOX_W - 8;
+    //int row_h = BOX_H / 3;
+    //int right_x = BOX_X + BOX_W - 8;
 
     // разделители (на всякий)
-    GFX_DrawHLine(BOX_X, BOX_Y + row_h,     BOX_W, UI_FG);
-    GFX_DrawHLine(BOX_X, BOX_Y + 2*row_h,   BOX_W, UI_FG);
+    GFX_DrawHLine(BOX_X, BOX_Y + ROW_H,     BOX_W, UI_FG);
+    GFX_DrawHLine(BOX_X, BOX_Y + 2*ROW_H,   BOX_W, UI_FG);
 
     // рисуем цифры с правильным цветом
-    UIF_DrawNumber6_Right27_Fixed(right_x, BOX_Y + 0*row_h + 8, d->svc_oil, UI_BG, UI_BG);
-    UIF_DrawUInt_Right27(right_x, BOX_Y + 0*row_h + 8, d->svc_oil,   svc_color(d->svc_oil),   UI_BG);
+    UIF_DrawNumber6_Right27_Fixed(RIGHT_X, ROW_Y0, d->svc_oil, UI_BG, UI_BG);
+    UIF_DrawUInt_Right27(RIGHT_X, ROW_Y0, d->svc_oil,   svc_color(d->svc_oil),   UI_BG);
 
-    UIF_DrawNumber6_Right27_Fixed(right_x, BOX_Y + 1*row_h + 8, d->svc_grm, UI_BG, UI_BG);
-    UIF_DrawUInt_Right27(right_x, BOX_Y + 1*row_h + 8, d->svc_grm,   svc_color(d->svc_grm),   UI_BG);
+    UIF_DrawNumber6_Right27_Fixed(RIGHT_X, ROW_Y1, d->svc_grm, UI_BG, UI_BG);
+    UIF_DrawUInt_Right27(RIGHT_X, ROW_Y1, d->svc_grm,   svc_color(d->svc_grm),   UI_BG);
 
-    UIF_DrawNumber6_Right27_Fixed(right_x, BOX_Y + 2*row_h + 8, d->svc_spark, UI_BG, UI_BG);
-    UIF_DrawUInt_Right27(right_x, BOX_Y + 2*row_h + 8, d->svc_spark, svc_color(d->svc_spark), UI_BG);
+    UIF_DrawNumber6_Right27_Fixed(RIGHT_X, ROW_Y2, d->svc_spark, UI_BG, UI_BG);
+    UIF_DrawUInt_Right27(RIGHT_X, ROW_Y2, d->svc_spark, svc_color(d->svc_spark), UI_BG);
 
     g_svc_drawn = 1;
 }
@@ -469,6 +501,19 @@ void UI_DrawTopText(const ui_data_t *d)
     draw_temp(d->temp_c);
 }
 
+void UI_DrawErrorIndicator(uint8_t show)
+{
+    if (show) {
+        // Красный квадратик
+        GFX_FillRect(ERROR_INDICATOR_X, ERROR_INDICATOR_Y,
+                     ERROR_INDICATOR_SIZE, ERROR_INDICATOR_SIZE, UI_WARN_RED);
+    } else {
+        // Стереть (залить фоном)
+        GFX_FillRect(ERROR_INDICATOR_X, ERROR_INDICATOR_Y,
+                     ERROR_INDICATOR_SIZE, ERROR_INDICATOR_SIZE, UI_BG);
+    }
+}
+
 void UI_DrawTime(const ui_data_t *d)
 {
     draw_time(d->hh, d->mm);
@@ -488,9 +533,13 @@ void UI_DrawCounters(const ui_data_t *d)
 {
     if (!g_cache.valid) {
         g_cache.valid = 1;
-        g_cache.trip_fuel = ~d->trip_fuel;
-        g_cache.trip_day  = ~d->trip_day;
-        g_cache.trip_ab   = ~d->trip_ab;
+        g_cache.trip_fuel = d->trip_fuel - 1;
+        g_cache.trip_day  = d->trip_day - 1;
+        g_cache.trip_ab   = d->trip_ab - 1;
+
+//        g_cache.trip_fuel = ~d->trip_fuel;
+//        g_cache.trip_day  = ~d->trip_day;
+//        g_cache.trip_ab   = ~d->trip_ab;
     }
 
     if (g_page == UI_PAGE_MAIN) {

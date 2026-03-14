@@ -143,7 +143,14 @@ int main(void)
 
     /* дисплей init ... */
     UI_DrawStatic();
-    UI_DrawAll(&g_data);
+    UI_DrawAll_Start(&g_data);
+
+    // Проверяем ошибки и рисуем индикатор
+    if (g_system_error & ERR_EEPROM) {
+        UI_DrawErrorIndicator(1);
+    } else {
+        UI_DrawErrorIndicator(0);
+    }
 
   while (1)
   {
@@ -156,10 +163,13 @@ int main(void)
 	      }
 
 	      /* 1 км */
-    /* Обработка километровых импульсов (с накоплением) */
-    uint32_t km = SPEED_GetKmPending();  // сколько километров накопилось
-    if (km) {
-			for (uint32_t i = 0; i < km; i++) APP_OnKmTick(&g_data);
+	      /* Обработка километровых импульсов (с накоплением) */
+	      uint32_t km = SPEED_GetKmPending();  // сколько километров накопилось
+	      if (km) {
+	          for (uint32_t i = 0; i < km; i++) {
+	              APP_OnKmTick(&g_data);       // каждый километр
+	          }
+	          SPEED_ConsumeKm(km);              // сбрасываем счётчик
 
 	          UI_DrawOdoMain(&g_data);
 	          UI_DrawCounters(&g_data);
@@ -327,6 +337,3 @@ void assert_failed(uint8_t *file, uint32_t line)
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
-
-
-
